@@ -20,7 +20,8 @@
             "react",
             "react-dom"
         ],
-        "strict": true
+        "strict": true,
+        "forceConsistentCasingInFileNames": true
     },
     "include": [
         "src"
