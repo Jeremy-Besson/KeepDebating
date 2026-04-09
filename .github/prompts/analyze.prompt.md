@@ -18,7 +18,7 @@ Instructions:
 - [ ] **Phase C: Implementation, Testing & PR**
 - **Current Status:** Phase A - Analysis
 
-2. Analyze requirements, constraints, edge cases, dependencies, and ask questions to clarify if needed.
+2. Analyze requirements, constraints, edge cases, dependencies, and ask questions to clarify the requirements if needed.
 3. Output a section titled "Refined Requirements" as a numbered list.
 4. End with this exact gate question:
    Proceed to /plan? (Yes/No)
