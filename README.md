@@ -1,4 +1,4 @@
-# TryingStuff
+# KeepDebating - Agentic Debate Assistant PoC
 
 ## Overview
 

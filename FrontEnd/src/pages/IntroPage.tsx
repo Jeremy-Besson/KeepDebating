@@ -333,7 +333,21 @@ export default function App() {
           />
 
           <section className="bg-white rounded-xl shadow-sm border p-5">
-            <h2 className="text-xl font-bold mb-3 border-l-4 border-orange-600 pl-3">
+            <h2 className="text-xl font-bold mb-3 border-l-4 border-purple-600 pl-3">
+              Public Github repository for the POC - KeepDebating
+            </h2>
+            <a
+              href="https://github.com/Jeremy-Besson/KeepDebating"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-800 font-medium underline transition-colors duration-200"
+            >
+              https://github.com/Jeremy-Besson/KeepDebating
+            </a>
+          </section>
+
+          <section className="bg-white rounded-xl shadow-sm border p-5">
+            <h2 className="text-xl font-bold mb-3 border-l-4 border-green-600 pl-3">
               Tasks - Second Week
             </h2>
 
@@ -466,7 +480,7 @@ export default function App() {
           </section>
 
           <section className="bg-white rounded-xl shadow-sm border p-5">
-            <h2 className="text-xl font-bold mb-4 border-l-4 border-purple-600 pl-3">
+            <h2 className="text-xl font-bold mb-4 border-l-4 border-cyan-600 pl-3">
               Feature Wikipedia API implementation with Github Copilot - Vibe
               coding!!!
             </h2>
