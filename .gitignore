@@ -1,0 +1,30 @@
+# =========================
+# .NET / C# (BackEnd + solution-level outputs)
+# =========================
+**/bin/
+**/obj/
+
+# Visual Studio user/cache files
+.vs/
+*.user
+*.suo
+
+# VS Code: ignore local workspace data by default,
+# then allow shared project configuration files.
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# =========================
+# FrontEnd (Vite / Node)
+# =========================
+FrontEnd/node_modules/
+FrontEnd/dist/
+FrontEnd/.vite/
+FrontEnd/*.log
+FrontEnd/*.tsbuildinfo
+
+# Optional OS noise
+.DS_Store
+Thumbs.db
