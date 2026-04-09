@@ -91,3 +91,57 @@ These same checks are enforced in GitHub Actions:
 
 - `.github/workflows/frontend-ci.yml`
 - `.github/workflows/backend-ci.yml`
+
+## Azure Deployment Scaffold
+
+This repository now includes starter files for Azure infrastructure and deployment:
+
+- `infra/main.bicep`
+- `infra/parameters/dev.bicepparam`
+- `.github/workflows/deploy-backend.yml`
+- `.github/workflows/deploy-frontend.yml`
+- `FrontEnd/public/staticwebapp.config.json`
+
+### 1. Provision Infrastructure (Dev)
+
+From repository root:
+
+```powershell
+az group create --name <your-rg> --location <your-location>
+az deployment group create --resource-group <your-rg> --parameters infra/parameters/dev.bicepparam --template-file infra/main.bicep
+```
+
+### 2. Configure GitHub Secrets
+
+Set these repository secrets for deployment workflows:
+
+- `AZURE_CLIENT_ID`
+- `AZURE_TENANT_ID`
+- `AZURE_SUBSCRIPTION_ID`
+- `AZURE_WEBAPP_NAME`
+- `AZURE_STATIC_WEB_APPS_API_TOKEN`
+
+### 3. Configure BackEnd App Settings
+
+In the Azure App Service settings, configure:
+
+- `AzureOpenAI__Endpoint`
+- `AzureOpenAI__ApiKey`
+- `AzureOpenAI__Model`
+
+### 4. Configure FrontEnd API Route
+
+Update `FrontEnd/public/staticwebapp.config.json` and replace:
+
+- `https://REPLACE_WITH_BACKEND_HOST`
+
+with your deployed App Service host, for example:
+
+- `https://my-app-api-dev.azurewebsites.net`
+
+### 5. Deploy
+
+Push to `main` (or run workflows manually) to execute:
+
+- BackEnd deployment: `.github/workflows/deploy-backend.yml`
+- FrontEnd deployment: `.github/workflows/deploy-frontend.yml`
