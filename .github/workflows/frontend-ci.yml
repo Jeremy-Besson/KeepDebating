@@ -29,8 +29,13 @@ jobs:
           cache: "npm"
           cache-dependency-path: FrontEnd/package-lock.json
 
+      - name: Show Node/NPM versions
+        run: |
+          node --version
+          npm --version
+
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --include=optional
 
       - name: Lint
         run: npm run lint
