@@ -98,6 +98,7 @@ public sealed class DebateSessionState
     public required DebaterPersona ProPersona { get; init; }
     public required DebaterPersona ConPersona { get; init; }
     public required Dictionary<string, string> WikipediaCache { get; init; }
+    public required DebateKnowledgeStore KnowledgeStore { get; init; }
 
     public string? PendingCheckpointId { get; set; }
     public string? LastHumanAnswer { get; set; }
