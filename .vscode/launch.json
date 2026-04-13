@@ -1,0 +1,28 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "BackEnd: Launch (HTTP)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build-backend",
+            "program": "${workspaceFolder}/BackEnd/bin/Debug/net10.0/BackEnd.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/BackEnd",
+            "stopAtEntry": false,
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                "ASPNETCORE_URLS": "http://localhost:5008"
+            },
+            "serverReadyAction": {
+                "action": "openExternally",
+                "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+            }
+        },
+        {
+            "name": "BackEnd: Attach to process",
+            "type": "coreclr",
+            "request": "attach"
+        }
+    ]
+}
