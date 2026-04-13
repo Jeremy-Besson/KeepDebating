@@ -1,8 +1,11 @@
 using Azure;
 using Azure.AI.Inference;
+
 using Microsoft.Extensions.AI;
 using Microsoft.SemanticKernel;
+
 using System.Text.Json;
+
 using TryingStuff.Models;
 using TryingStuff.Services;
 
@@ -281,7 +284,7 @@ static DebateSessionState CreateSessionState(
     DebateKnowledgeStore knowledgeStore)
 {
     var selectedDebaters = DebaterCatalog.ResolvePair(request.ProDebaterId, request.ConDebaterId);
-    var safeTopic = request.Topic ?? "Is Tamagotchi good for kids?";
+    var safeTopic = request.Topic ?? "Does vertical slice architecture fit well with Clean architecture?";
     var safeRounds = Math.Clamp(request.Rounds ?? 3, 1, 20);
     var safeSpectatorCount = Math.Clamp(request.SpectatorCount ?? 3, 1, 14);
     var startedAt = DateTimeOffset.UtcNow;
