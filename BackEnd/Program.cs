@@ -346,7 +346,8 @@ static RuntimeFactoryResult CreateRuntime(
         apiKey!,
         model,
         wikipediaCache,
-        loggerFactory.CreateLogger<DebateBrainOrchestrator>());
+        loggerFactory.CreateLogger<DebateBrainOrchestrator>(),
+        loggerFactory.CreateLogger<WikipediaPlugin>());
     var orchestrator = new DebateOrchestrator(
         client,
         brain,
