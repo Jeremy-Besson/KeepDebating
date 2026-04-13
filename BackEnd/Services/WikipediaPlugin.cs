@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 
 namespace TryingStuff.Services;
@@ -8,13 +10,46 @@ public sealed class WikipediaPlugin
 {
     private const string SearchBaseUrl = "https://en.wikipedia.org/w/api.php";
     private const string SummaryBaseUrl = "https://en.wikipedia.org/api/rest_v1/page/summary";
+    private const int ResponsePreviewLength = 300;
+
+    private static readonly Action<ILogger, string, Exception?> LogWikipediaSearchStarted =
+        LoggerMessage.Define<string>(
+            LogLevel.Information,
+            new EventId(1100, nameof(LogWikipediaSearchStarted)),
+            "Wikipedia tool search started. Query: {Query}");
+
+    private static readonly Action<ILogger, string, string, Exception?> LogWikipediaSearchCompleted =
+        LoggerMessage.Define<string, string>(
+            LogLevel.Information,
+            new EventId(1101, nameof(LogWikipediaSearchCompleted)),
+            "Wikipedia tool search completed. Query: {Query}. Response: {Response}");
+
+    private static readonly Action<ILogger, string, string, Exception?> LogWikipediaSearchCacheHit =
+        LoggerMessage.Define<string, string>(
+            LogLevel.Information,
+            new EventId(1102, nameof(LogWikipediaSearchCacheHit)),
+            "Wikipedia tool search cache hit. Query: {Query}. Response: {Response}");
+
+    private static readonly Action<ILogger, string, string, Exception?> LogWikipediaSearchFailed =
+        LoggerMessage.Define<string, string>(
+            LogLevel.Error,
+            new EventId(1103, nameof(LogWikipediaSearchFailed)),
+            "Wikipedia tool search failed. Query: {Query}. ExceptionType: {ExceptionType}");
+
+    private static readonly Action<ILogger, string, double, Exception?> LogWikipediaSearchTelemetry =
+        LoggerMessage.Define<string, double>(
+            LogLevel.Information,
+            new EventId(1104, nameof(LogWikipediaSearchTelemetry)),
+            "Wikipedia tool search telemetry. Query: {Query}. DurationMs: {DurationMs}");
 
     private static readonly HttpClient Http = CreateHttpClient();
     private readonly Dictionary<string, string> _cache;
+    private readonly ILogger<WikipediaPlugin> _logger;
 
-    public WikipediaPlugin(Dictionary<string, string> cache)
+    public WikipediaPlugin(Dictionary<string, string> cache, ILogger<WikipediaPlugin> logger)
     {
         _cache = cache;
+        _logger = logger;
     }
 
     [KernelFunction("search")]
@@ -24,9 +59,15 @@ public sealed class WikipediaPlugin
         CancellationToken cancellationToken = default)
     {
         var normalizedQuery = (query ?? string.Empty).Trim();
+        var startedAt = Stopwatch.GetTimestamp();
+
+        LogWikipediaSearchStarted(_logger, normalizedQuery, null);
+
         if (string.IsNullOrWhiteSpace(normalizedQuery))
         {
-            return "No Wikipedia results: empty query.";
+            var emptyResponse = "No Wikipedia results: empty query.";
+            LogWikipediaSearchCompleted(_logger, normalizedQuery, FormatResponseForLogs(emptyResponse), null);
+            return emptyResponse;
         }
 
         var cacheKey = normalizedQuery.ToLowerInvariant();
@@ -34,60 +75,90 @@ public sealed class WikipediaPlugin
         {
             if (_cache.TryGetValue(cacheKey, out var cached))
             {
+                LogWikipediaSearchCacheHit(_logger, normalizedQuery, FormatResponseForLogs(cached), null);
                 return cached;
             }
         }
 
-        var encodedQuery = Uri.EscapeDataString(normalizedQuery);
-        var searchUrl =
-            $"{SearchBaseUrl}?action=query&list=search&srsearch={encodedQuery}&format=json&utf8=1&srlimit=3";
-
-        using var searchResponse = await Http.GetAsync(searchUrl, cancellationToken);
-        if (!searchResponse.IsSuccessStatusCode)
+        try
         {
-            return $"No Wikipedia results: search request failed ({(int)searchResponse.StatusCode}).";
+            var encodedQuery = Uri.EscapeDataString(normalizedQuery);
+            var searchUrl =
+                $"{SearchBaseUrl}?action=query&list=search&srsearch={encodedQuery}&format=json&utf8=1&srlimit=3";
+
+            using var searchResponse = await Http.GetAsync(searchUrl, cancellationToken);
+            if (!searchResponse.IsSuccessStatusCode)
+            {
+                var failedSearchResponse = $"No Wikipedia results: search request failed ({(int)searchResponse.StatusCode}).";
+                LogWikipediaSearchCompleted(_logger, normalizedQuery, FormatResponseForLogs(failedSearchResponse), null);
+                return failedSearchResponse;
+            }
+
+            await using var searchStream = await searchResponse.Content.ReadAsStreamAsync(cancellationToken);
+            using var searchJson = await JsonDocument.ParseAsync(searchStream, cancellationToken: cancellationToken);
+
+            if (!TryGetTopTitle(searchJson.RootElement, out var topTitle) || string.IsNullOrWhiteSpace(topTitle))
+            {
+                const string noMatchResponse = "No Wikipedia results: no matching article found.";
+                LogWikipediaSearchCompleted(_logger, normalizedQuery, FormatResponseForLogs(noMatchResponse), null);
+                return noMatchResponse;
+            }
+
+            var encodedTitle = Uri.EscapeDataString(topTitle);
+            var summaryUrl = $"{SummaryBaseUrl}/{encodedTitle}";
+
+            using var summaryResponse = await Http.GetAsync(summaryUrl, cancellationToken);
+            if (!summaryResponse.IsSuccessStatusCode)
+            {
+                var noSummaryResponse = $"No Wikipedia summary available for '{topTitle}'.";
+                LogWikipediaSearchCompleted(_logger, normalizedQuery, FormatResponseForLogs(noSummaryResponse), null);
+                return noSummaryResponse;
+            }
+
+            await using var summaryStream = await summaryResponse.Content.ReadAsStreamAsync(cancellationToken);
+            using var summaryJson = await JsonDocument.ParseAsync(summaryStream, cancellationToken: cancellationToken);
+
+            var title = summaryJson.RootElement.TryGetProperty("title", out var titleNode)
+                ? titleNode.GetString() ?? topTitle
+                : topTitle;
+
+            var extract = summaryJson.RootElement.TryGetProperty("extract", out var extractNode)
+                ? extractNode.GetString() ?? ""
+                : "";
+
+            var canonicalUrl = TryGetCanonicalUrl(summaryJson.RootElement)
+                ?? $"https://en.wikipedia.org/wiki/{encodedTitle}";
+
+            var condensedExtract = extract.Length > 500 ? string.Concat(extract.AsSpan(0, 500), "...") : extract;
+            var result = $"Wikipedia: {title}. {condensedExtract} Source: {canonicalUrl}";
+
+            lock (_cache)
+            {
+                _cache[cacheKey] = result;
+            }
+
+            LogWikipediaSearchCompleted(_logger, normalizedQuery, FormatResponseForLogs(result), null);
+            return result;
         }
-
-        await using var searchStream = await searchResponse.Content.ReadAsStreamAsync(cancellationToken);
-        using var searchJson = await JsonDocument.ParseAsync(searchStream, cancellationToken: cancellationToken);
-
-        if (!TryGetTopTitle(searchJson.RootElement, out var topTitle) || string.IsNullOrWhiteSpace(topTitle))
+        catch (Exception ex)
         {
-            return "No Wikipedia results: no matching article found.";
+            LogWikipediaSearchFailed(_logger, normalizedQuery, ex.GetType().Name, ex);
+            throw;
         }
-
-        var encodedTitle = Uri.EscapeDataString(topTitle);
-        var summaryUrl = $"{SummaryBaseUrl}/{encodedTitle}";
-
-        using var summaryResponse = await Http.GetAsync(summaryUrl, cancellationToken);
-        if (!summaryResponse.IsSuccessStatusCode)
+        finally
         {
-            return $"No Wikipedia summary available for '{topTitle}'.";
+            var elapsed = Stopwatch.GetElapsedTime(startedAt);
+            LogWikipediaSearchTelemetry(_logger, normalizedQuery, elapsed.TotalMilliseconds, null);
         }
+    }
 
-        await using var summaryStream = await summaryResponse.Content.ReadAsStreamAsync(cancellationToken);
-        using var summaryJson = await JsonDocument.ParseAsync(summaryStream, cancellationToken: cancellationToken);
+    private static string FormatResponseForLogs(string response)
+    {
+        var preview = response.Length > ResponsePreviewLength
+            ? string.Concat(response.AsSpan(0, ResponsePreviewLength), "...")
+            : response;
 
-        var title = summaryJson.RootElement.TryGetProperty("title", out var titleNode)
-            ? titleNode.GetString() ?? topTitle
-            : topTitle;
-
-        var extract = summaryJson.RootElement.TryGetProperty("extract", out var extractNode)
-            ? extractNode.GetString() ?? ""
-            : "";
-
-        var canonicalUrl = TryGetCanonicalUrl(summaryJson.RootElement)
-            ?? $"https://en.wikipedia.org/wiki/{encodedTitle}";
-
-        var condensedExtract = extract.Length > 500 ? string.Concat(extract.AsSpan(0, 500), "...") : extract;
-        var result = $"Wikipedia: {title}. {condensedExtract} Source: {canonicalUrl}";
-
-        lock (_cache)
-        {
-            _cache[cacheKey] = result;
-        }
-
-        return result;
+        return $"Length={response.Length}; Preview={preview}; Full={response}";
     }
 
     private static HttpClient CreateHttpClient()
