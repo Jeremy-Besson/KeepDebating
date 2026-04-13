@@ -31,8 +31,21 @@ public sealed class DebateOrchestrator
             new EventId(2003, nameof(LogGenerateTurnError)),
             "Error generating turn. Round: {Round}, Speaker: {Speaker}, Stance: {Stance}, Topic: {Topic}, Model: {Model}");
 
+    private static readonly Action<ILogger, int, string, string, Exception?> LogTurnFacts =
+        LoggerMessage.Define<int, string, string>(
+            LogLevel.Information,
+            new EventId(2004, nameof(LogTurnFacts)),
+            "Turn facts injected. Round: {Round}, Stance: {Stance}, Facts: {Facts}");
+
+    private static readonly Action<ILogger, string, Exception?> LogRagRetrieveFailed =
+        LoggerMessage.Define<string>(
+            LogLevel.Warning,
+            new EventId(2005, nameof(LogRagRetrieveFailed)),
+            "RAG retrieval failed (turn continues without RAG facts). ExceptionType: {ExceptionType}");
+
     private readonly ChatCompletionsClient _client;
     private readonly DebateBrainOrchestrator _brain;
+    private readonly DebateKnowledgeStore _knowledgeStore;
     private readonly string _model;
     private readonly string _debateStyle;
     private readonly string _proTone;
@@ -43,6 +56,7 @@ public sealed class DebateOrchestrator
     public DebateOrchestrator(
         ChatCompletionsClient client,
         DebateBrainOrchestrator brain,
+        DebateKnowledgeStore knowledgeStore,
         string model,
         ILogger<DebateOrchestrator> logger,
         string? debateStyle = null,
@@ -52,6 +66,7 @@ public sealed class DebateOrchestrator
     {
         _client = client;
         _brain = brain;
+        _knowledgeStore = knowledgeStore;
         _model = model;
         _logger = logger;
         _debateStyle = string.IsNullOrWhiteSpace(debateStyle)
@@ -137,9 +152,31 @@ public sealed class DebateOrchestrator
 
             var speaker = stance == "PRO" ? pro : con;
             var opponentName = stance == "PRO" ? con.Name : pro.Name;
-            var toolFacts = decision.RetrievedFacts.Count > 0
-                ? decision.RetrievedFacts
-                : ["No Wikipedia fact was retrieved for this turn."];
+
+            var ragQuery = $"{transcript.Topic} {lastTurn?.Message ?? string.Empty}".Trim();
+            IReadOnlyList<string> ragFacts;
+            try
+            {
+                ragFacts = await _knowledgeStore.RetrieveAsync(ragQuery, topK: 2, cancellationToken);
+            }
+            catch (Exception ragEx)
+            {
+                LogRagRetrieveFailed(_logger, ragEx.GetType().Name, ragEx);
+                ragFacts = [];
+            }
+
+            var toolFacts = decision.RetrievedFacts
+                .Concat(ragFacts)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            if (toolFacts.Length == 0)
+            {
+                toolFacts = ["No fact was retrieved for this turn."];
+            }
+
+            var factsSummary = string.Join(" | ", toolFacts.Select((f, i) => $"[{i + 1}] {f}"));
+            LogTurnFacts(_logger, round, stance, factsSummary, null);
 
             var turnStart = DateTimeOffset.UtcNow;
             var turn = GenerateTurn(

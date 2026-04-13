@@ -36,6 +36,12 @@ public sealed class WikipediaPlugin
             new EventId(1103, nameof(LogWikipediaSearchFailed)),
             "Wikipedia tool search failed. Query: {Query}. ExceptionType: {ExceptionType}");
 
+    private static readonly Action<ILogger, string, string, Exception?> LogKnowledgeStoreStoreFailed =
+        LoggerMessage.Define<string, string>(
+            LogLevel.Warning,
+            new EventId(1105, nameof(LogKnowledgeStoreStoreFailed)),
+            "Knowledge store embedding failed (Wikipedia result still returned). Query: {Query}. ExceptionType: {ExceptionType}");
+
     private static readonly Action<ILogger, string, double, Exception?> LogWikipediaSearchTelemetry =
         LoggerMessage.Define<string, double>(
             LogLevel.Information,
@@ -44,11 +50,13 @@ public sealed class WikipediaPlugin
 
     private static readonly HttpClient Http = CreateHttpClient();
     private readonly Dictionary<string, string> _cache;
+    private readonly DebateKnowledgeStore _knowledgeStore;
     private readonly ILogger<WikipediaPlugin> _logger;
 
-    public WikipediaPlugin(Dictionary<string, string> cache, ILogger<WikipediaPlugin> logger)
+    public WikipediaPlugin(Dictionary<string, string> cache, DebateKnowledgeStore knowledgeStore, ILogger<WikipediaPlugin> logger)
     {
         _cache = cache;
+        _knowledgeStore = knowledgeStore;
         _logger = logger;
     }
 
@@ -135,6 +143,15 @@ public sealed class WikipediaPlugin
             lock (_cache)
             {
                 _cache[cacheKey] = result;
+            }
+
+            try
+            {
+                await _knowledgeStore.StoreAsync(cacheKey, result, cancellationToken);
+            }
+            catch (Exception storeEx)
+            {
+                LogKnowledgeStoreStoreFailed(_logger, normalizedQuery, storeEx.GetType().Name, storeEx);
             }
 
             LogWikipediaSearchCompleted(_logger, normalizedQuery, FormatResponseForLogs(result), null);
