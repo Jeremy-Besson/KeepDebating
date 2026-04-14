@@ -3,11 +3,11 @@ name: FrontEnd CI
 on:
   push:
     paths:
-      - "FrontEnd/**"
+      - "frontend/**"
       - ".github/workflows/frontend-ci.yml"
   pull_request:
     paths:
-      - "FrontEnd/**"
+      - "frontend/**"
       - ".github/workflows/frontend-ci.yml"
 
 jobs:
@@ -16,7 +16,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: FrontEnd
+        working-directory: frontend
 
     steps:
       - name: Checkout
@@ -27,7 +27,7 @@ jobs:
         with:
           node-version: "22"
           cache: "npm"
-          cache-dependency-path: FrontEnd/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Show Node/NPM versions
         run: |

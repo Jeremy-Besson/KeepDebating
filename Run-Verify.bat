@@ -9,7 +9,7 @@ echo ==========================================
 echo.
 
 echo [1/2] BackEnd verification
-pushd BackEnd || goto :fail
+pushd backend || goto :fail
 
 dotnet restore .\BackEnd.csproj
 if errorlevel 1 goto :fail_pop
@@ -21,7 +21,7 @@ popd
 
 echo.
 echo [2/2] FrontEnd verification
-pushd FrontEnd || goto :fail
+pushd frontend || goto :fail
 
 npm ci
 if errorlevel 1 goto :fail_pop

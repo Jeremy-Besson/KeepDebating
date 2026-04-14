@@ -61,7 +61,7 @@ Run from repository root:
 
 ### FrontEnd
 
-Run from `FrontEnd/`:
+Run from `frontend/`:
 
 ```powershell
 npm ci
@@ -78,7 +78,7 @@ npm run build
 
 ### BackEnd
 
-Run from `BackEnd/`:
+Run from `backend/`:
 
 ```powershell
 dotnet restore .\BackEnd.csproj
@@ -100,7 +100,7 @@ This repository now includes starter files for Azure infrastructure and deployme
 - `infra/parameters/dev.bicepparam`
 - `.github/workflows/deploy-backend.yml`
 - `.github/workflows/deploy-frontend.yml`
-- `FrontEnd/public/staticwebapp.config.json`
+- `frontend/public/staticwebapp.config.json`
 
 ### 1. Provision Infrastructure (Dev)
 
@@ -131,7 +131,7 @@ In the Azure App Service settings, configure:
 
 ### 4. Configure FrontEnd API Route
 
-Update `FrontEnd/public/staticwebapp.config.json` and replace:
+Update `frontend/public/staticwebapp.config.json` and replace:
 
 - `https://REPLACE_WITH_BACKEND_HOST`
 

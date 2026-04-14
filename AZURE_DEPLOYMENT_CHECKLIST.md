@@ -114,7 +114,7 @@ Click **Save**.
 
 ## 5. Update Frontend API Route
 
-Edit [FrontEnd/public/staticwebapp.config.json](FrontEnd/public/staticwebapp.config.json):
+Edit [frontend/public/staticwebapp.config.json](frontend/public/staticwebapp.config.json):
 
 Replace the placeholder in line 2:
 
@@ -293,7 +293,7 @@ git push origin main
 ### Can't call /api from frontend (CORS error)
 
 - Backend CORS is currently restricted to dev environment
-- For production, update [BackEnd/Program.cs](BackEnd/Program.cs#L8) CORS policy with SWA domain
+- For production, update [backend/Program.cs](backend/Program.cs#L8) CORS policy with SWA domain
 
 ---
 

@@ -60,7 +60,7 @@ Only responses that are part of the gated workflow (triggered by `/analyze`, `/p
 
 When asked to verify code quality, lint, type-check, or build status, run the commands directly instead of only describing them.
 
-### FrontEnd (from `FrontEnd/`)
+### frontend (from `frontend/`)
 
 - `npm ci`
 - `npm run verify`
@@ -71,7 +71,7 @@ Equivalent expanded checks:
 - `npm run typecheck`
 - `npm run build`
 
-### BackEnd (from `BackEnd/`)
+### backend (from `backend/`)
 
 - `dotnet restore .\\BackEnd.csproj`
 - `dotnet build .\\BackEnd.csproj -c Release --no-incremental -warnaserror -v minimal`

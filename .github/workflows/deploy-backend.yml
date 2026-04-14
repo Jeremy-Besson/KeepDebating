@@ -21,13 +21,13 @@ jobs:
           dotnet-version: "10.0.x"
 
       - name: Restore
-        run: dotnet restore BackEnd/BackEnd.csproj
+        run: dotnet restore backend/BackEnd.csproj
 
       - name: Build
-        run: dotnet build BackEnd/BackEnd.csproj -c Release --no-incremental -warnaserror -v minimal
+        run: dotnet build backend/BackEnd.csproj -c Release --no-incremental -warnaserror -v minimal
 
       - name: Publish
-        run: dotnet publish BackEnd/BackEnd.csproj -c Release -o ./publish
+        run: dotnet publish backend/BackEnd.csproj -c Release -o ./publish
 
       - name: Azure Login
         uses: azure/login@v2
