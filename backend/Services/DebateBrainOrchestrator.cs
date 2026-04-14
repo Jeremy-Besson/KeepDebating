@@ -37,7 +37,9 @@ public sealed class DebateBrainOrchestrator
         string apiKey,
         string model,
         Dictionary<string, string> wikipediaCache,
-        ILogger<DebateBrainOrchestrator> logger)
+        DebateKnowledgeStore knowledgeStore,
+        ILogger<DebateBrainOrchestrator> logger,
+        ILogger<WikipediaPlugin> wikipediaLogger)
     {
         _logger = logger;
 
@@ -51,7 +53,7 @@ public sealed class DebateBrainOrchestrator
                 apiKey)
             .Build();
 
-        _kernel.Plugins.AddFromObject(new WikipediaPlugin(wikipediaCache), "Wikipedia");
+        _kernel.Plugins.AddFromObject(new WikipediaPlugin(wikipediaCache, knowledgeStore, wikipediaLogger), "Wikipedia");
         _chatCompletion = _kernel.Services.GetRequiredService<IChatCompletionService>();
     }
 

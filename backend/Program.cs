@@ -1,6 +1,11 @@
 using Azure;
 using Azure.AI.Inference;
+
+using Microsoft.Extensions.AI;
+using Microsoft.SemanticKernel;
+
 using System.Text.Json;
+
 using TryingStuff.Models;
 using TryingStuff.Services;
 
@@ -46,13 +51,14 @@ app.MapPost("/api/debates/run", async (
     DebateSessionStore sessionStore) =>
 {
     var wikipediaCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-    var runtime = CreateRuntime(configuration, loggerFactory, wikipediaCache);
+    var knowledgeStore = CreateKnowledgeStore(configuration, loggerFactory);
+    var runtime = CreateRuntime(configuration, loggerFactory, wikipediaCache, knowledgeStore);
     if (!runtime.Success)
     {
         return Results.BadRequest(new { error = runtime.ErrorMessage });
     }
 
-    var session = CreateSessionState(request, runtime.Model!, wikipediaCache);
+    var session = CreateSessionState(request, runtime.Model!, wikipediaCache, knowledgeStore);
     sessionStore.Create(session);
 
     var progress = await runtime.Orchestrator!.ContinueDebateAsync(session, waitForHumanInput: false);
@@ -115,7 +121,7 @@ app.MapPost("/api/debates/answer", async (
         });
     }
 
-    var runtime = CreateRuntime(configuration, loggerFactory, session.WikipediaCache);
+    var runtime = CreateRuntime(configuration, loggerFactory, session.WikipediaCache, session.KnowledgeStore);
     if (!runtime.Success)
     {
         return Results.BadRequest(new { error = runtime.ErrorMessage });
@@ -177,7 +183,8 @@ app.MapGet("/api/debates/stream", async (
     };
 
     var wikipediaCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-    var runtime = CreateRuntime(configuration, loggerFactory, wikipediaCache);
+    var knowledgeStore = CreateKnowledgeStore(configuration, loggerFactory);
+    var runtime = CreateRuntime(configuration, loggerFactory, wikipediaCache, knowledgeStore);
 
     response.Headers.ContentType = "text/event-stream";
     response.Headers.CacheControl = "no-cache";
@@ -192,7 +199,7 @@ app.MapGet("/api/debates/stream", async (
         return;
     }
 
-    var session = CreateSessionState(request, runtime.Model!, wikipediaCache);
+    var session = CreateSessionState(request, runtime.Model!, wikipediaCache, knowledgeStore);
     sessionStore.Create(session);
 
     try
@@ -273,10 +280,11 @@ async Task WriteSseEvent(HttpResponse response, string eventName, object payload
 static DebateSessionState CreateSessionState(
     DebateRunRequest request,
     string model,
-    Dictionary<string, string> wikipediaCache)
+    Dictionary<string, string> wikipediaCache,
+    DebateKnowledgeStore knowledgeStore)
 {
     var selectedDebaters = DebaterCatalog.ResolvePair(request.ProDebaterId, request.ConDebaterId);
-    var safeTopic = request.Topic ?? "Is Tamagotchi good for kids?";
+    var safeTopic = request.Topic ?? "Does vertical slice architecture fit well with Clean architecture?";
     var safeRounds = Math.Clamp(request.Rounds ?? 3, 1, 20);
     var safeSpectatorCount = Math.Clamp(request.SpectatorCount ?? 3, 1, 14);
     var startedAt = DateTimeOffset.UtcNow;
@@ -288,6 +296,7 @@ static DebateSessionState CreateSessionState(
         ProPersona = selectedDebaters.Pro,
         ConPersona = selectedDebaters.Con,
         WikipediaCache = wikipediaCache,
+        KnowledgeStore = knowledgeStore,
         Transcript = new DebateTranscript
         {
             Topic = safeTopic,
@@ -318,10 +327,27 @@ static async Task CompleteSessionAsync(
         onVerdictGenerated));
 }
 
+static DebateKnowledgeStore CreateKnowledgeStore(IConfiguration configuration, ILoggerFactory loggerFactory)
+{
+    var endpoint = GetBaseEndpoint(configuration["AzureOpenAI:EmbeddingEndpoint"]);
+    var apiKey = configuration["AzureOpenAI:EmbeddingApiKey"] ?? string.Empty;
+    var embeddingDeployment = configuration["AzureOpenAI:EmbeddingDeployment"] ?? "text-embedding-3-small";
+
+#pragma warning disable SKEXP0010 // AddAzureOpenAIEmbeddingGenerator is experimental in SemanticKernel
+    var embeddingGenerator = Kernel.CreateBuilder()
+        .AddAzureOpenAIEmbeddingGenerator(embeddingDeployment, endpoint, apiKey)
+        .Build()
+        .GetRequiredService<IEmbeddingGenerator<string, Embedding<float>>>();
+#pragma warning restore SKEXP0010
+
+    return new DebateKnowledgeStore(embeddingGenerator, loggerFactory.CreateLogger<DebateKnowledgeStore>());
+}
+
 static RuntimeFactoryResult CreateRuntime(
     IConfiguration configuration,
     ILoggerFactory loggerFactory,
-    Dictionary<string, string> wikipediaCache)
+    Dictionary<string, string> wikipediaCache,
+    DebateKnowledgeStore knowledgeStore)
 {
     var endpoint = NormalizeAzureEndpoint(configuration["AzureOpenAI:Endpoint"]);
     var apiKey = configuration["AzureOpenAI:ApiKey"];
@@ -346,10 +372,14 @@ static RuntimeFactoryResult CreateRuntime(
         apiKey!,
         model,
         wikipediaCache,
-        loggerFactory.CreateLogger<DebateBrainOrchestrator>());
+        knowledgeStore,
+        loggerFactory.CreateLogger<DebateBrainOrchestrator>(),
+        loggerFactory.CreateLogger<WikipediaPlugin>());
+
     var orchestrator = new DebateOrchestrator(
         client,
         brain,
+        knowledgeStore,
         model,
         loggerFactory.CreateLogger<DebateOrchestrator>(),
         debateStyle,
@@ -392,6 +422,21 @@ static bool HasValidAzureConfiguration(string? endpoint, string? apiKey)
     var keyLooksPlaceholder = apiKey.Contains("replace-with-your-api-key", StringComparison.OrdinalIgnoreCase);
 
     return !endpointLooksPlaceholder && !keyLooksPlaceholder;
+}
+
+static string GetBaseEndpoint(string? endpoint)
+{
+    if (string.IsNullOrWhiteSpace(endpoint))
+    {
+        return string.Empty;
+    }
+
+    if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri))
+    {
+        return endpoint.TrimEnd('/');
+    }
+
+    return $"{uri.Scheme}://{uri.Authority}";
 }
 
 static string? NormalizeAzureEndpoint(string? endpoint)
