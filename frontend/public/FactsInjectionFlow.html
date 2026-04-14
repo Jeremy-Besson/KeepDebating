@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Facts Injection Flow</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      .node {
+        transition: all 2s ease-in-out;
+        border-width: 3px;
+      }
+      .node-active {
+        border-color: #3b82f6;
+        background-color: #eff6ff;
+        box-shadow: 0 0 20px rgba(59, 130, 246, 0.25);
+      }
+      .connection {
+        stroke: #cbd5e1;
+        stroke-width: 3;
+        fill: none;
+        transition: stroke 0.8s;
+      }
+      .connection-active {
+        stroke: #3b82f6;
+      }
+      .particle {
+        fill: #60a5fa;
+        filter: drop-shadow(0 0 6px #60a5fa);
+      }
+      @keyframes flow {
+        to { offset-distance: 100%; }
+      }
+      .animate-flow {
+        animation: flow 2.5s ease-in-out forwards;
+      }
+    </style>
+  </head>
+  <body class="bg-slate-50 text-slate-800 min-h-screen p-4 font-sans">
+    <div class="max-w-7xl mx-auto">
+      <header class="mb-4 border-b-2 border-slate-200 pb-3 text-center">
+        <h1 class="text-3xl font-black text-blue-600 tracking-tight">
+          FACTS INJECTION FLOW
+        </h1>
+      </header>
+
+      <div class="grid grid-cols-12 gap-6 relative" id="grid-container">
+        <svg
+          class="absolute inset-0 w-full h-full pointer-events-none"
+          id="svg-canvas"
+          style="z-index: 0; overflow: visible"
+        >
+          <path id="path1" class="connection" d="" />
+          <path id="path2" class="connection" d="" />
+          <path id="path3" class="connection" d="" />
+          <path id="path4" class="connection" d="" />
+          <path id="path5" class="connection" d="" />
+        </svg>
+
+        <!-- Left col: DecideAsync (top) + Final Prompt (bottom) -->
+        <div class="col-span-4 flex flex-col justify-between z-10">
+          <div id="node-1" class="node p-4 border-slate-200 bg-white rounded-xl shadow-sm">
+            <span class="text-xs text-blue-400 font-black uppercase tracking-tighter">Event 1100: Brain Decision</span>
+            <h3 class="text-xl font-bold mt-1">DecideAsync</h3>
+            <p class="text-sm text-slate-600 mt-2 leading-relaxed">
+              LLM analyzes debate state and triggers the <b>Wikipedia tool</b> call with a fresh query.
+            </p>
+          </div>
+
+          <div id="node-6" class="node p-4 border-slate-200 bg-white rounded-xl shadow-sm">
+            <span class="text-xs text-orange-400 font-black uppercase tracking-tighter">Event 2004: Injection</span>
+            <h3 class="text-xl font-bold mt-1">Final Prompt</h3>
+            <p class="text-sm text-slate-600 mt-2 leading-relaxed">
+              Merging <b>retrievedFacts</b> + <b>ragFacts</b> into bullet points for the final debater turn.
+            </p>
+          </div>
+        </div>
+
+        <!-- Middle col: Wikipedia, Terminal, RAG Context -->
+        <div class="col-span-5 flex flex-col gap-3 z-10">
+          <div id="node-2" class="node p-4 border-slate-200 bg-white rounded-xl shadow-sm">
+            <span class="text-xs text-blue-400 font-black uppercase tracking-tighter">Event 1101: Search</span>
+            <h3 class="text-xl font-bold mt-1">Wikipedia API</h3>
+            <p class="text-sm text-slate-600 mt-2">
+              Two HTTP calls: Search for title &rarr; Fetch summary (500 chars). Includes session cache check.
+            </p>
+          </div>
+
+          <div
+            class="bg-slate-900 border-2 border-slate-700 p-3 h-36 overflow-y-auto rounded-xl shadow-sm font-mono shrink-0"
+            id="terminal"
+          >
+            <div class="text-emerald-400 text-sm">&gt; System ready. Click START...</div>
+          </div>
+
+          <div id="node-5" class="node p-4 border-slate-200 bg-white rounded-xl shadow-sm">
+            <span class="text-xs text-orange-400 font-black uppercase tracking-tighter">Event 1201: Retrieval</span>
+            <h3 class="text-xl font-bold mt-1">RAG Context</h3>
+            <p class="text-sm text-slate-600 mt-2">
+              Automatic semantic search pulls the top 2 most relevant facts from the accumulated store.
+            </p>
+          </div>
+        </div>
+
+        <!-- Right col: Azure OpenAI + KnowledgeStore (centered) -->
+        <div class="col-span-3 flex flex-col justify-center gap-4 z-10">
+          <div id="node-3" class="node p-4 border-slate-200 bg-white rounded-xl shadow-sm">
+            <span class="text-xs text-emerald-400 font-black uppercase tracking-tighter">Event 1200: Vectorize</span>
+            <h3 class="text-lg font-bold mt-1">Azure OpenAI</h3>
+            <p class="text-sm text-slate-600 mt-2">Generating text-embedding-3 vectors.</p>
+          </div>
+
+          <div id="node-4" class="node p-4 border-slate-200 bg-white rounded-xl shadow-sm">
+            <span class="text-xs text-emerald-400 font-black uppercase tracking-tighter">Store: Vector Base</span>
+            <h3 class="text-lg font-bold mt-1">KnowledgeStore</h3>
+            <p class="text-sm text-slate-600 mt-2">In-memory store grows turn-by-turn.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-4 flex items-center justify-center gap-6">
+        <button
+          onclick="startFlow()"
+          class="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white text-base font-black rounded-xl shadow-lg transition-all active:scale-95 uppercase"
+        >
+          Run Sequence
+        </button>
+        <button
+          onclick="location.reload()"
+          class="px-6 py-3 bg-slate-200 hover:bg-slate-300 text-slate-800 text-base font-black rounded-xl transition-all uppercase"
+        >
+          Reset
+        </button>
+      </div>
+    </div>
+
+    <script>
+      const terminal = document.getElementById("terminal");
+
+      // Get element rect relative to the grid container
+      function relRect(el) {
+        const base = document.getElementById("grid-container").getBoundingClientRect();
+        const r = el.getBoundingClientRect();
+        return {
+          left:  r.left  - base.left,
+          right: r.right - base.left,
+          top:   r.top   - base.top,
+          bottom:r.bottom- base.top,
+          midX:  (r.left + r.right)  / 2 - base.left,
+          midY:  (r.top  + r.bottom) / 2 - base.top,
+        };
+      }
+
+      function drawConnections() {
+        const n = {};
+        [1, 2, 3, 4, 5, 6].forEach(i => n[i] = relRect(document.getElementById(`node-${i}`)));
+
+        // path1: node-1 right → node-2 left (horizontal)
+        document.getElementById("path1").setAttribute("d",
+          `M ${n[1].right} ${n[1].midY} L ${n[2].left} ${n[2].midY}`);
+
+        // path2: node-2 right → node-3 left (horizontal)
+        document.getElementById("path2").setAttribute("d",
+          `M ${n[2].right} ${n[2].midY} L ${n[3].left} ${n[3].midY}`);
+
+        // path3: node-3 bottom → node-4 top (vertical, same column)
+        document.getElementById("path3").setAttribute("d",
+          `M ${n[3].midX} ${n[3].bottom} L ${n[4].midX} ${n[4].top}`);
+
+        // path4: node-4 left → node-5 right (bezier curve going left then to middle col)
+        const cx = n[4].left - 50;
+        document.getElementById("path4").setAttribute("d",
+          `M ${n[4].left} ${n[4].midY} C ${cx} ${n[4].midY} ${cx} ${n[5].midY} ${n[5].right} ${n[5].midY}`);
+
+        // path5: node-5 left → node-6 right (horizontal)
+        document.getElementById("path5").setAttribute("d",
+          `M ${n[5].left} ${n[5].midY} L ${n[6].right} ${n[6].midY}`);
+      }
+
+      window.addEventListener("load", drawConnections);
+      window.addEventListener("resize", drawConnections);
+      new ResizeObserver(drawConnections).observe(document.getElementById("grid-container"));
+
+      function log(msg, eventId) {
+        const div = document.createElement("div");
+        div.className = "mb-2 text-sm border-l-4 border-blue-500 pl-3";
+        div.innerHTML = `<span class="text-slate-500">[${eventId}]</span> <span class="text-slate-300">${msg}</span>`;
+        terminal.prepend(div);
+      }
+
+      async function activateNode(id, eventId, msg, delay = 2500) {
+        const node = document.getElementById(`node-${id}`);
+        node.classList.add("node-active");
+        log(msg, eventId);
+        await new Promise((r) => setTimeout(r, delay));
+        node.classList.remove("node-active");
+      }
+
+      function createParticle(pathId) {
+        drawConnections();
+        const path = document.getElementById(pathId);
+        const d = path.getAttribute("d");
+        if (!d) return;
+        const particle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        particle.setAttribute("r", "6");
+        particle.setAttribute("class", "particle");
+        particle.style.offsetPath = `path('${d}')`;
+        particle.style.offsetDistance = "0%";
+        particle.classList.add("animate-flow");
+        document.getElementById("svg-canvas").appendChild(particle);
+        setTimeout(() => particle.remove(), 2600);
+      }
+
+      async function startFlow() {
+        // 1 → 2: Brain triggers Wikipedia
+        await activateNode(1, 1100, "Brain deciding whether to call Wikipedia Tool...", 2000);
+        createParticle("path1");
+        await new Promise((r) => setTimeout(r, 1500));
+
+        // 2: Wikipedia fetch
+        await activateNode(2, 1101, "Fetching data from Wikipedia API (HTTP GET)...", 3000);
+
+        // 2 → 3: Wikipedia result to Azure OpenAI for embedding
+        createParticle("path2");
+        await new Promise((r) => setTimeout(r, 1000));
+        await activateNode(3, 1200, "Sending text to Azure OpenAI for Vector Embedding.", 2000);
+
+        // 3 → 4: Store vector in KnowledgeStore
+        createParticle("path3");
+        await new Promise((r) => setTimeout(r, 1000));
+        await activateNode(4, 1201, "Saving Vector float[1536] to Memory Store.", 2000);
+
+        // 4 → 5: RAG retrieval from KnowledgeStore
+        createParticle("path4");
+        await new Promise((r) => setTimeout(r, 2000));
+        await activateNode(5, 1201, "Searching Memory for semantically similar facts...", 3000);
+
+        // 5 → 6: Inject facts into final prompt
+        createParticle("path5");
+        await new Promise((r) => setTimeout(r, 2500));
+        await activateNode(6, 2004, "Facts injected into the Debater's Prompt.", 3000);
+
+        log("SEQUENCE COMPLETE. Debater is grounded.", "SYS");
+      }
+    </script>
+  </body>
+</html>
