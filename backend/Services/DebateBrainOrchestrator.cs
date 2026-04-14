@@ -28,6 +28,12 @@ public sealed class DebateBrainOrchestrator
             new EventId(1002, nameof(LogBrainDecisionFailed)),
             "Brain decision failed. ExceptionType: {ExceptionType}. Falling back to strict alternation.");
 
+    private static readonly Action<ILogger, string, Exception?> LogHumanQuestionGenerationFailed =
+        LoggerMessage.Define<string>(
+            LogLevel.Warning,
+            new EventId(1003, nameof(LogHumanQuestionGenerationFailed)),
+            "Human question generation failed. ExceptionType: {ExceptionType}. Using fallback question.");
+
     private readonly Kernel _kernel;
     private readonly IChatCompletionService _chatCompletion;
     private readonly ILogger<DebateBrainOrchestrator> _logger;
@@ -63,13 +69,14 @@ public sealed class DebateBrainOrchestrator
             && string.IsNullOrWhiteSpace(context.LastHumanAnswer)
             && context.MainTurnsCompleted >= 2)
         {
+            var question = await GenerateHumanQuestionAsync(context, cancellationToken);
             return new BrainDecision
             {
                 Decision = "ask-user",
                 SpeakerStance = null,
                 TurnKind = null,
                 Reason = "Collecting one human preference to steer the remainder of the debate.",
-                Question = "Before we continue, what should the debaters prioritize most: child wellbeing, practical routines, long-term habits, or evidence quality?",
+                Question = question,
                 RetrievedFacts = []
             };
         }
@@ -132,6 +139,55 @@ public sealed class DebateBrainOrchestrator
         {
             LogBrainDecisionFailed(_logger, ex.GetType().Name, ex);
             return StrictAlternationFallback(context, "Fallback after orchestration failure. See backend logs.");
+        }
+    }
+
+    private async Task<string> GenerateHumanQuestionAsync(BrainDecisionContext context, CancellationToken cancellationToken)
+    {
+        var recentArguments = context.RecentTurns.Count > 0
+            ? string.Join("\n", context.RecentTurns.TakeLast(2).Select(t => $"- {t.Stance}: {t.Message}"))
+            : "No arguments yet.";
+
+        var prompt = $"""
+            You are moderating a debate on this topic: "{context.Topic}"
+
+            Recent arguments:
+            {recentArguments}
+
+            Generate one concise question (max 20 words) to ask the human audience to help steer the rest of the debate.
+            The question must be specific to the topic above — not generic.
+            Return only the question, nothing else.
+            """;
+
+        try
+        {
+            var chatHistory = new ChatHistory();
+            chatHistory.AddUserMessage(prompt);
+
+            var settings = new AzureOpenAIPromptExecutionSettings
+            {
+                Temperature = 0.7,
+                MaxTokens = 60
+            };
+
+            var reply = await _chatCompletion.GetChatMessageContentAsync(
+                chatHistory,
+                settings,
+                _kernel,
+                cancellationToken);
+
+            var question = reply.Content?.Trim();
+            if (!string.IsNullOrWhiteSpace(question))
+            {
+                return question;
+            }
+
+            return $"What aspect of \"{context.Topic}\" should the debaters focus on next?";
+        }
+        catch (Exception ex)
+        {
+            LogHumanQuestionGenerationFailed(_logger, ex.GetType().Name, ex);
+            return $"What aspect of \"{context.Topic}\" should the debaters focus on next?";
         }
     }
 
