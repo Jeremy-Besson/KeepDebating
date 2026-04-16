@@ -14,6 +14,8 @@ public sealed class DebateTurn
 
     public string? OrchestratorReason { get; init; }
 
+    public string? ReflectionText { get; init; }
+
     public required IReadOnlyList<string> ToolFactsUsed { get; init; }
 
     public required DateTimeOffset Timestamp { get; init; }
