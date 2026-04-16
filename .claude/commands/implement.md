@@ -35,7 +35,7 @@ agent: "agent"
 
 3. **PR Documentation:**
    - Generate a **Conventional Commit** message (e.g., `feat($ARGUMENTS): ...`).
-   - Create a summary of changes, "How to Test" instructions, and a list of modified files.
+   - Create a summary of changes and "How to Test" instructions. Do **not** include a list of modified files.
    - Save this PR summary to `Features/$ARGUMENTS/pull_request.md`.
 
 ---
