@@ -225,6 +225,14 @@ app.MapGet("/api/debates/stream", async (
                     sessionId = session.SessionId,
                     checkpoint
                 }),
+                turn => WriteSseEvent(response, "moderation", new
+                {
+                    round = turn.Round,
+                    stance = turn.Stance,
+                    flagged = turn.Moderation?.Flagged ?? false,
+                    issues = turn.Moderation?.Issues ?? Array.Empty<string>(),
+                    summary = turn.Moderation?.Summary ?? string.Empty
+                }),
                 response.HttpContext.RequestAborted);
 
             if (progress.Status == "completed")
@@ -376,12 +384,18 @@ static RuntimeFactoryResult CreateRuntime(
         loggerFactory.CreateLogger<DebateBrainOrchestrator>(),
         loggerFactory.CreateLogger<WikipediaPlugin>());
 
+    var moderator = new DebateModerator(
+        client,
+        model,
+        loggerFactory.CreateLogger<DebateModerator>());
+
     var orchestrator = new DebateOrchestrator(
         client,
         brain,
         knowledgeStore,
         model,
         loggerFactory.CreateLogger<DebateOrchestrator>(),
+        moderator,
         debateStyle,
         proTone,
         conTone,

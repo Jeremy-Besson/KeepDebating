@@ -19,4 +19,5 @@ public sealed class DebateTurn
     public required IReadOnlyList<string> ToolFactsUsed { get; init; }
 
     public required DateTimeOffset Timestamp { get; init; }
+    public ModerationNote? Moderation { get; set; }
 }

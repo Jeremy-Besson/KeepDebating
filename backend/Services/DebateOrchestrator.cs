@@ -61,6 +61,12 @@ public sealed class DebateOrchestrator
             new EventId(3002, nameof(LogPlanGuidanceInjected)),
             "Plan guidance injected. Round: {Round}, Stance: {Stance}, ArgumentType: {ArgumentType}");
 
+    private static readonly Action<ILogger, int, string, bool, Exception?> LogModerationAttached =
+        LoggerMessage.Define<int, string, bool>(
+            LogLevel.Debug,
+            new EventId(4002, nameof(LogModerationAttached)),
+            "Moderation attached to turn. Round: {Round}, Stance: {Stance}, Flagged: {Flagged}");
+
     private readonly ChatCompletionsClient _client;
     private readonly DebateBrainOrchestrator _brain;
     private readonly DebateKnowledgeStore _knowledgeStore;
@@ -70,6 +76,7 @@ public sealed class DebateOrchestrator
     private readonly string _conTone;
     private readonly TimeSpan _minTurnDelay;
     private readonly ILogger<DebateOrchestrator> _logger;
+    private readonly DebateModerator _moderator;
 
     public DebateOrchestrator(
         ChatCompletionsClient client,
@@ -77,6 +84,7 @@ public sealed class DebateOrchestrator
         DebateKnowledgeStore knowledgeStore,
         string model,
         ILogger<DebateOrchestrator> logger,
+        DebateModerator moderator,
         string? debateStyle = null,
         string? proTone = null,
         string? conTone = null,
@@ -87,6 +95,7 @@ public sealed class DebateOrchestrator
         _knowledgeStore = knowledgeStore;
         _model = model;
         _logger = logger;
+        _moderator = moderator;
         _debateStyle = string.IsNullOrWhiteSpace(debateStyle)
             ? "Natural conversational debate with concise, direct language."
             : debateStyle;
@@ -104,6 +113,7 @@ public sealed class DebateOrchestrator
         bool waitForHumanInput,
         Func<DebateTurn, Task>? onTurnGenerated = null,
         Func<HumanLoopCheckpoint, Task>? onQuestionRaised = null,
+        Func<DebateTurn, Task>? onModerationComplete = null,
         CancellationToken cancellationToken = default)
     {
         var transcript = session.Transcript;
@@ -247,6 +257,18 @@ public sealed class DebateOrchestrator
                 }
 
                 await onTurnGenerated(turn);
+            }
+
+            if (string.Equals(turnKind, "argument", StringComparison.OrdinalIgnoreCase))
+            {
+                var note = await _moderator.EvaluateAsync(turn, transcript.Topic, cancellationToken);
+                turn.Moderation = note;
+                LogModerationAttached(_logger, turn.Round, turn.Stance, note.Flagged, null);
+
+                if (onModerationComplete is not null)
+                {
+                    await onModerationComplete(turn);
+                }
             }
         }
 
