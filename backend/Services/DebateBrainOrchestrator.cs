@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
@@ -33,6 +34,18 @@ public sealed class DebateBrainOrchestrator
             LogLevel.Warning,
             new EventId(1003, nameof(LogHumanQuestionGenerationFailed)),
             "Human question generation failed. ExceptionType: {ExceptionType}. Using fallback question.");
+
+    private static readonly Action<ILogger, string, string, Exception?> LogDebatePlanCreated =
+        LoggerMessage.Define<string, string>(
+            LogLevel.Information,
+            new EventId(3000, nameof(LogDebatePlanCreated)),
+            "Debate plan created. Stance: {Stance}, Strategy: {Strategy}");
+
+    private static readonly Action<ILogger, string, string, Exception?> LogDebatePlanFailed =
+        LoggerMessage.Define<string, string>(
+            LogLevel.Warning,
+            new EventId(3001, nameof(LogDebatePlanFailed)),
+            "Debate plan failed. Stance: {Stance}, Reason: {Reason}");
 
     private readonly Kernel _kernel;
     private readonly IChatCompletionService _chatCompletion;
@@ -91,6 +104,7 @@ public sealed class DebateBrainOrchestrator
         - You may ask a human question only when the debate lacks critical context to continue responsibly.
         - Keep human questions concise and actionable.
                 - You have a Wikipedia tool. Use it when evidence is thin or stale and choose precise search queries.
+        - If "plannedArgumentType" is set in the debate state, prefer that rhetorical style for this turn — but deviate if the debate flow calls for it.
 
         Return strict JSON only with this shape:
         {
@@ -139,6 +153,76 @@ public sealed class DebateBrainOrchestrator
         {
             LogBrainDecisionFailed(_logger, ex.GetType().Name, ex);
             return StrictAlternationFallback(context, "Fallback after orchestration failure. See backend logs.");
+        }
+    }
+
+    public async Task<StancePlan?> PlanDebateAsync(
+        string topic,
+        int rounds,
+        string stance,
+        CancellationToken cancellationToken = default)
+    {
+        var safeTopic = topic.Replace("\"", "'");
+
+        var prompt = $$"""
+            You are creating a debate strategy for a {{stance}} debater.
+            Topic: "{{safeTopic}}"
+            Rounds: {{rounds}}
+
+            For each round (1 to {{rounds}}), assign one argument type that best fits this topic and stance.
+            Choose freely — e.g., statistical, emotional, philosophical, ethical, analogical, narrative, rebuttal, etc.
+            Vary the types across rounds for a dynamic, unpredictable debate.
+
+            Return strict JSON only:
+            {
+              "strategy": [
+                { "round": 1, "argumentType": "statistical" },
+                { "round": 2, "argumentType": "emotional" }
+              ]
+            }
+            """;
+
+        try
+        {
+            var chatHistory = new ChatHistory();
+            chatHistory.AddUserMessage(prompt);
+
+            var settings = new AzureOpenAIPromptExecutionSettings
+            {
+                Temperature = 0.7,
+                TopP = 0.9,
+                MaxTokens = 200
+            };
+
+            var reply = await _chatCompletion.GetChatMessageContentAsync(
+                chatHistory,
+                settings,
+                _kernel,
+                cancellationToken);
+
+            var raw = reply.Content ?? string.Empty;
+
+            if (!TryParseStrategyRaw(raw, out var strategyRaw) || strategyRaw?.Strategy is null)
+            {
+                LogDebatePlanFailed(_logger, stance, "Unparsable JSON response", null);
+                return null;
+            }
+
+            var roundPlans = strategyRaw.Strategy
+                .Where(r => r.Round > 0 && !string.IsNullOrWhiteSpace(r.ArgumentType))
+                .Select(r => new RoundPlan { Round = r.Round, ArgumentType = r.ArgumentType!.Trim() })
+                .ToArray();
+
+            var stancePlan = new StancePlan { Stance = stance, Rounds = roundPlans };
+            var strategyStr = string.Join(", ", roundPlans.Select(r => $"R{r.Round}:{r.ArgumentType}"));
+            LogDebatePlanCreated(_logger, stance, strategyStr, null);
+
+            return stancePlan;
+        }
+        catch (Exception ex)
+        {
+            LogDebatePlanFailed(_logger, stance, ex.GetType().Name, ex);
+            return null;
         }
     }
 
@@ -219,6 +303,33 @@ public sealed class DebateBrainOrchestrator
             {
                 // Try the next candidate representation.
             }
+        }
+
+        return false;
+    }
+
+    private static bool TryParseStrategyRaw(string raw, out StrategyRaw? parsed)
+    {
+        parsed = null;
+
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return false;
+        }
+
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+
+        foreach (var candidate in BuildParseCandidates(raw))
+        {
+            try
+            {
+                parsed = JsonSerializer.Deserialize<StrategyRaw>(candidate, options);
+                if (parsed is not null)
+                {
+                    return true;
+                }
+            }
+            catch (JsonException) { }
         }
 
         return false;
@@ -390,6 +501,17 @@ public sealed class DebateBrainOrchestrator
         public IReadOnlyList<string>? RetrievedFacts { get; init; }
     }
 
+    private sealed class StrategyRaw
+    {
+        public IReadOnlyList<RoundPlanRaw>? Strategy { get; init; }
+    }
+
+    private sealed class RoundPlanRaw
+    {
+        public int Round { get; init; }
+        public string? ArgumentType { get; init; }
+    }
+
     private sealed record AzureOpenAiConnectorConfig(string ResourceEndpoint, string DeploymentName);
 }
 
@@ -406,6 +528,9 @@ public sealed class BrainDecisionContext
     public string? LastTurnMessage { get; init; }
     public required IReadOnlyList<DebateTurn> RecentTurns { get; init; }
     public string? LastHumanAnswer { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? PlannedArgumentType { get; init; }
 }
 
 public sealed class BrainDecision

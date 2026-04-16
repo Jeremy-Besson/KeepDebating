@@ -55,6 +55,12 @@ public sealed class DebateOrchestrator
             new EventId(2007, nameof(LogReflectionGenerated)),
             "Reflection generated. Round: {Round}, Stance: {Stance}, Reflection: {Reflection}");
 
+    private static readonly Action<ILogger, int, string, string, Exception?> LogPlanGuidanceInjected =
+        LoggerMessage.Define<int, string, string>(
+            LogLevel.Information,
+            new EventId(3002, nameof(LogPlanGuidanceInjected)),
+            "Plan guidance injected. Round: {Round}, Stance: {Stance}, ArgumentType: {ArgumentType}");
+
     private readonly ChatCompletionsClient _client;
     private readonly DebateBrainOrchestrator _brain;
     private readonly DebateKnowledgeStore _knowledgeStore;
@@ -105,6 +111,23 @@ public sealed class DebateOrchestrator
         var con = CreateDebaterProfile(session.ConPersona, "CON");
         var mainTurnTarget = transcript.Rounds * 2;
 
+        // Run both planning calls in parallel — non-fatal if either fails.
+        var planningResults = await Task.WhenAll(
+            _brain.PlanDebateAsync(transcript.Topic, transcript.Rounds, "PRO", cancellationToken),
+            _brain.PlanDebateAsync(transcript.Topic, transcript.Rounds, "CON", cancellationToken));
+
+        var proPlan = planningResults[0];
+        var conPlan = planningResults[1];
+
+        if (proPlan is not null || conPlan is not null)
+        {
+            session.Plan = new DebatePlan
+            {
+                Pro = proPlan ?? new StancePlan { Stance = "PRO", Rounds = [] },
+                Con = conPlan ?? new StancePlan { Stance = "CON", Rounds = [] }
+            };
+        }
+
         while (CountMainTurns(transcript.Turns) < mainTurnTarget)
         {
             var mainTurnsCompleted = CountMainTurns(transcript.Turns);
@@ -112,6 +135,12 @@ public sealed class DebateOrchestrator
             var round = (mainTurnsCompleted / 2) + 1;
             var canUseFollowUp = !session.FollowUpUsedByRound.TryGetValue(round, out var used) || !used;
             var lastTurn = transcript.Turns.LastOrDefault();
+
+            var plannedArgumentType = session.Plan?.GetArgumentType(expectedStance, round);
+            if (plannedArgumentType is not null)
+            {
+                LogPlanGuidanceInjected(_logger, round, expectedStance, plannedArgumentType, null);
+            }
 
             var decision = await _brain.DecideAsync(new BrainDecisionContext
             {
@@ -125,7 +154,8 @@ public sealed class DebateOrchestrator
                 LastTurnStance = lastTurn?.Stance,
                 LastTurnMessage = lastTurn?.Message,
                 RecentTurns = transcript.Turns.TakeLast(6).ToArray(),
-                LastHumanAnswer = session.LastHumanAnswer
+                LastHumanAnswer = session.LastHumanAnswer,
+                PlannedArgumentType = plannedArgumentType
             }, cancellationToken);
 
             LogBrainDecision(

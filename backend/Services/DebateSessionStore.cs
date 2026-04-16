@@ -103,6 +103,7 @@ public sealed class DebateSessionState
     public string? PendingCheckpointId { get; set; }
     public string? LastHumanAnswer { get; set; }
     public bool IsCompleted { get; set; }
+    public DebatePlan? Plan { get; set; }
 
     public Dictionary<int, bool> FollowUpUsedByRound { get; } = [];
     public object SyncRoot { get; } = new();
