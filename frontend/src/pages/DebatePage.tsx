@@ -11,7 +11,7 @@ import type {
 import type { LayoutOutletContext } from "../App";
 
 const defaultRequest: DebateRunRequest = {
-  topic: "Is Tamagotchi good for kids?",
+  topic: "Is Vertical Slice Architecture good for modern software development?",
   spectatorCount: 3,
   proDebaterId: "ausra",
   conDebaterId: "mindaugas",
