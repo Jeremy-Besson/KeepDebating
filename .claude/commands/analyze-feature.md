@@ -13,17 +13,20 @@ agent: "agent"
 - [ ] **Phase A: Analysis**
 - [ ] **Phase B: Planning**
 - [ ] **Phase C: Implementation, Testing & PR**
+- [ ] **Final: Pull Request Created**
 - **Current Status:** Phase A - Analysis Start
 
 ---
 
 ### 2. Analysis Task
-Please perform a deep dive into the following:
+
+Perform an initial analysis of the feature request:
 * **Requirements:** What are the "must-haves"?
 * **Constraints:** Technical or business limitations.
 * **Edge Cases:** What could go wrong or be missed?
 * **Dependencies:** External libraries, APIs, or internal modules.
-* **Clarification:** List any questions needed to finalize the scope.
+
+**After analyzing:** Based on your analysis, use the `AskUserQuestion` tool to ask any questions that would help refine or confirm the requirements (up to 4 at once). Use the answers to update your analysis before saving the requirements file.
 
 ---
 
@@ -32,7 +35,7 @@ Please perform a deep dive into the following:
 2.  **FeatureDescription:** 1-2 concise lines.
 3.  **RefinedRequirements:** A comprehensive Markdown list of the finalized scope.
 
-**Action:** Use your file system tool to create the directory `/Features/{FeatureName}` and save the `{RefinedRequirements}` into a file named `requirements.md` within that folder.
+**Action:** Use your file system tool to create the directory `Features/{FeatureName}` and save the `{RefinedRequirements}` into a file named `requirements.md` within that folder.
 
 ---
 
@@ -50,6 +53,10 @@ Please perform a deep dive into the following:
 - [x] **Phase A: Analysis**
 - [ ] **Phase B: Planning**
 - [ ] **Phase C: Implementation, Testing & PR**
+- [ ] **Final: Pull Request Created**
 - **Current Status:** Phase A - Analysis Completed
 
-**Proceed to /plan? (Yes/No)**
+### 6. Final Gate
+- Use the `AskUserQuestion` tool with the question "Proceed to /plan?" and two options: label "Yes" and label "No".
+- If Yes: invoke the `/plan $ARGUMENTS` skill.
+- If No: await further instructions.
