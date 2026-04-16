@@ -22,7 +22,7 @@ agent: "agent"
 
 0. **Pre-flight checks:** Run the following git checks before doing anything else. If any check fails, stop and tell the user what to fix — do not proceed with implementation.
    - `git branch --show-current` → must be `main`
-   - `git status --porcelain` → must be empty (no uncommitted changes)
+   - `git status --porcelain` → must be empty **except** for files under `Features/$ARGUMENTS/` (untracked or modified feature docs are allowed)
    - `git cherry -v` → must be empty (no unpushed commits)
 
 1. **Plan Retrieval:**
